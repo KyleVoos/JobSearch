@@ -5,6 +5,7 @@ import pandas as pd
 import pymysql
 import traceback
 import time
+from User_Input.user_input import InputData
 
 base_url = "https://www.indeed.com/"
 default_websites = ['indeed']
@@ -33,7 +34,8 @@ def get_indeed_jobs(job_title, locations):
     for job in  job_title:
         for loc in locations:
             print("Searching for {0} jobs in {1}".format(job, loc))
-            url = "https://www.indeed.com/jobs?q={0}&l={1}&fromage=14".format(job.replace(' ', '%20'), loc.replace(' ', '+'))
+            url = "https://www.indeed.com/jobs?q={0}&l={1}&fromage=14".format(job.replace(' ', '%20'),
+                                                                              loc.replace(' ', '+'))
             response = requests.get(url)
             total_pages = get_indeed_jobs_count(response)
             print("total_pages: {0}".format(total_pages))
@@ -194,7 +196,7 @@ def get_indeed_jobs_count(page):
 
     try:
         soup = BeautifulSoup(page.text, "lxml")
-        text = soup.find('div', {'id':'searchCountPages'}).get_text()
+        text = soup.find('div', {'id': 'searchCountPages'}).get_text()
         total_jobs = int(text.split("of ")[1].split(' ')[0].replace(',', ''))
         return total_jobs
     except:
@@ -206,7 +208,7 @@ def get_indeed_jobs_count(page):
 #
 #     if len(input) < 5:
 #         return None
-# 
+#
 #     try:
 #         input = str(val).lower().strip().replace(' ', '').split(',')
 #         return input
