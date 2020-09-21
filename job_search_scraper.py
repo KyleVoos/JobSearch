@@ -1,3 +1,10 @@
+"""
+Add an overview here later.
+
+TODO:
+    Split up find_job_title_indeed() and check_entry_level_job() so the functions are not getting
+    job data and filtering job results.
+"""
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -13,6 +20,21 @@ jobmap_filter = re.compile('jobmap\[[0-9]+\]=\s+{jk:\'(\w+)\'') #('jobmap\[[0-9]
 
 
 class JobSearchScraper:
+    """
+
+    Args:
+        title (str): Job title/query being searched.
+        location (str): Location of job search.
+        titles_filter ([str]): Phrases to filter jobs based on title out of search results.
+        search_filter (dict): Dictionary holding search options such as date posted, radius, etc.
+
+    Attributes:
+        title (str): Job title/query being searched.
+        location (str): Location of job search.
+        titles_filter ([str]): Phrases to filter jobs based on title out of search results.
+        search_filter (dict): Dictionary holding search options such as date posted, radius, etc.
+        jobmap ([str]): JavaScript variables from page results that are used to built dynamic URLs.
+    """
     title = ""
     location = ""
     titles_to_skip = []
@@ -26,6 +48,11 @@ class JobSearchScraper:
         self.search_filter = search_filter
 
     def get_indeed_jobs(self):
+        """
+
+        Returns:
+             [[str]]: 2d array holding all the results for the job title/location query.
+        """
         jobs_per_page = 10
         data = []
         print("Searching for {0} jobs in {1}".format(self.title, self.location))
@@ -61,6 +88,7 @@ class JobSearchScraper:
 
         Args:
             soup: requests result that has been processed by bs4
+
         Returns:
             [[str]]: Results of search as 2d array of strings
         """
@@ -84,9 +112,10 @@ class JobSearchScraper:
         values of the jobmap[] variable in a script of the html doc returned from the original page request.
         All of the jobmap values are found with a regex capture.
 
-        Params:
+        Args:
             text (BeautifulSoup object): The html results from the page request
-        :return:
+
+        Returns:
             No return
         """
         self.jobmap = jobmap_filter.findall(text)
@@ -128,12 +157,6 @@ class JobSearchScraper:
     #     print("fail")
 
 
-# def get_jobmap(text):
-#
-#     global jobmap
-#     jobmap = jobmap_filter.findall(text)
-
-
 # def get_indeed_job_info(soup):
 #
 #     data = []
@@ -155,8 +178,10 @@ class JobSearchScraper:
 def add_to_dataframe(job_data):
     """
     Not being used currently.
-    :param job_data:
-    :return:
+    Args:
+     job_data:
+
+    Returns:
     """
     global dataframe
     for job in job_data:
@@ -168,14 +193,14 @@ def find_job_title_indeed(card, titles_to_skip: [str], jobmap: [str]):
     Function that currently gets the job title, filters based on it, and calls check_entry_level_job which filters
     based on experience requirements and if its valid gets the job URL.
 
-    Params:
-        card (BeautifulSoup object): The individual job posting card being processed
-        titles_to_skip ([str]): Array of strings entered by user used to filter out results based on job title
+    Args:
+        card (BeautifulSoup object): The individual job posting card being processed.
+        titles_to_skip ([str]): Array of strings entered by user used to filter out results based on job title.
         jobmap ([str]):
 
     Returns:
-        str: The job title or empty string is result is being skipped
-        str: URL to individual job posting or empty string if being skipped
+        str: The job title or empty string is result is being skipped.
+        str: URL to individual job posting or empty string if being skipped.
     """
     title_text = card.find("h2", {"class":"title"})
     title = title_text.text.lower().strip()
@@ -190,7 +215,16 @@ def find_job_title_indeed(card, titles_to_skip: [str], jobmap: [str]):
 
 
 def check_entry_level_job(soup, jobmap: [str]):
+    """
 
+    Args:
+        soup (BeautifulSoup object): BS4 object of the job card being processed.
+        jobmap ([str]): The jobmap for this current instance of the JobSearchScraper class.
+
+    Returns:
+         bool: True if a valid entry level job, otherwise False.
+         str: Job posting URL if a valid job, otherwise empty string.
+    """
     for link in soup.find_all("a"):
         job_description_url = link.get('href')
         if job_description_url.find('pagead') != -1:
@@ -207,7 +241,15 @@ def check_entry_level_job(soup, jobmap: [str]):
     
     
 def find_company_indeed(card) -> str:
-    
+    """
+    Processes an individual job card to find the name of the company that posted the job.
+
+    Args:
+        card (BeautifulSoup object):
+
+    Returns:
+        str: The company name found from the job card.
+    """
     company_text = card.find('span', class_='company')
     if not company_text:
         company_text = card.find('div', class_='company')
@@ -217,7 +259,16 @@ def find_company_indeed(card) -> str:
 
 
 def find_job_location_indeed(card) -> str:
+    """
+    Scrapes the jobs location from an individual job card.
     
+    Args:
+        card (BeautifulSoup object): A BS4 object consisting of the section of the HTML doc result for a
+                                    single job posting (card taken from html div classname).
+
+    Returns:
+        str: The location scraped from the job card.
+    """
     location_text = card.find('span', class_='location')
     if not location_text:
         location_text = card.find('div', class_='location')
@@ -227,7 +278,16 @@ def find_job_location_indeed(card) -> str:
 
     
 def find_job_post_date_indeed(card) -> str:
-    
+    """
+    Scrapes the date the job was posted from an individual job card.
+
+    Args:
+        card (BeautifulSoup object): A BS4 object consisting of the section of the HTML doc result for a
+                                    single job posting (card taken from html div classname).
+
+    Returns:
+        str: Date scraped from the job card.
+    """
     date_text = card.find('span', class_='date')
     date = date_text.text.strip()
     
@@ -235,7 +295,16 @@ def find_job_post_date_indeed(card) -> str:
 
 
 def find_job_post_summary_indeed(card) -> str:
+    """
+    Scrapes the summary of the job from an individual job card.
 
+    Args:
+        card (BeautifulSoup object): A BS4 object consisting of the section of the HTML doc result for a
+                                    single job posting (card taken from html div classname).
+
+    Returns:
+         str: Summary scraped from job card.
+    """
     summary_text = card.find('div', class_='summary')
     summary = summary_text.text.strip().replace('\n', '')
 
@@ -243,7 +312,15 @@ def find_job_post_summary_indeed(card) -> str:
 
 
 def get_indeed_jobs_count(page) -> int:
+    """
+    Searches the original search query response for the total number of pages of results.
 
+    Args:
+        page (BeautifulSoup object): BS4 object of the original response for title/location search.
+
+    Returns:
+         int: Number of total pages of job search results.
+    """
     try:
         soup = BeautifulSoup(page.text, "lxml")
         text = soup.find('div', {'id': 'searchCountPages'}).get_text()
