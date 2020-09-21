@@ -65,8 +65,7 @@ def get_locations(input_data):
 
 def get_search_filters(location: str, input_data: InputData):
 
-
-    filters = {}
+    filters = {'q': location}
 
     if location.lower().find("state") == -1:
         cont = input("Search filters for {0}? (y/n)".format(location))
@@ -108,7 +107,6 @@ def get_search_filters(location: str, input_data: InputData):
                 except ValueError:
                     print("Invalid Input")
 
-    filters['q'] = location
     input_data.add_search_filter(location, filters)
 
 
