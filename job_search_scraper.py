@@ -1,21 +1,15 @@
 import requests
 from bs4 import BeautifulSoup
 import re
-import pandas as pd
 import urllib
-import pymysql
+
 
 base_url = "https://www.indeed.com/"
-# default_websites = ['indeed']
 # job_titles = ['Software Developer', 'sdet', 'junior software engineer', 'qa engineer']#['Software Developer', 'software engineer', 'sdet', 'junior software engineer', 'junior software developer', 'qa engineer']
 # search_locations = ['Portland','Seattle','United States']#]
 # titles_to_skip = ['senior', 'front', 'frontend', '2021', 'sr', 'sr.', 'director', 'lead', 'principal', 'manager']
 experience_filter = re.compile('[2-9]\s*\+?-?\s*[1-9]?\s*[yY]e?a?[rR][sS]?')
 jobmap_filter = re.compile('jobmap\[[0-9]+\]=\s+{jk:\'(\w+)\'') #('jobmap\[[0-9]?\]=\s+{(.*)+}')'jobmap\[[0-9]+\]=\s+{.+}'
-# # re.compile('jobmap\[[0-9]?\]\s+=\s+{(.*)+}')
-# jobmap = []
-# cols = ['Job_Title', 'Location', 'Company', 'Date', 'Salary', 'Description', 'url']
-# dataframe = pd.DataFrame(columns=cols)
 
 
 class JobSearchScraper:
@@ -24,8 +18,6 @@ class JobSearchScraper:
     titles_to_skip = []
     search_filter = {}
     jobmap = []
-    # dataframe = pd.DataFrame(columns=cols)
-    data = []
 
     def __init__(self, title: str, location: str, titles_filter: [str], search_filter: {}):
         self.title = title
@@ -34,21 +26,21 @@ class JobSearchScraper:
         self.search_filter = search_filter
 
     def get_indeed_jobs(self):
-        page_num = 0
         jobs_per_page = 10
+        data = []
         print("Searching for {0} jobs in {1}".format(self.title, self.location))
-        url = ("https://www.indeed.com/jobs?q={0}".format(self.title.replace(' ', '%20')) + urllib.parse.urlencode(self.search_filter))
+        url = ("https://www.indeed.com/jobs?q={0}&".format(self.title.replace(' ', '%20')) +
+               urllib.parse.urlencode(self.search_filter))
         response = requests.get(url)
         total_pages = get_indeed_jobs_count(response)
-        print("total_pages {0} for search {1} in {2}".format(total_pages, self.title, self.location))
         for page_num in range(0, total_pages, jobs_per_page):
+            print("job: {0} | loc: {1} | page_num: {2}".format(self.title, self.location, page_num))
             if page_num == 0:
                 soup = BeautifulSoup(response.content, "html.parser")
                 self.get_jobmap(response.text)
                 page_results = self.get_indeed_job_info(soup)
             else:
                 temp_url = "{0}&start={1}".format(url, page_num)
-                # print(temp_url)
                 response = requests.get(temp_url)
                 self.get_jobmap(response.text)
                 if response.status_code != 200:
@@ -57,12 +49,21 @@ class JobSearchScraper:
                 soup = BeautifulSoup(response.content, "html.parser")
                 page_results = self.get_indeed_job_info(soup)
 
-            self.data.extend(page_results)
+            data.extend(page_results)
 
-        return self.data
+        return data
 
     def get_indeed_job_info(self, soup):
+        """
+        Function that iterates through each of the job postings on a page of job search results
+        With BeautifulSoup each 'card' is found on the page and then processed individually. Each
+        card contains a job posting.
 
+        Args:
+            soup: requests result that has been processed by bs4
+        Returns:
+            [[str]]: Results of search as 2d array of strings
+        """
         data = []
         # try:
         for card in soup.find_all('div', {'class': 'jobsearch-SerpJobCard unifiedRow row result'}):
@@ -77,14 +78,18 @@ class JobSearchScraper:
 
         return data
 
-
     def get_jobmap(self, text):
+        """
+        Some of the links for job descriptions are created dynamically, this function finds the JavaScript
+        values of the jobmap[] variable in a script of the html doc returned from the original page request.
+        All of the jobmap values are found with a regex capture.
+
+        Params:
+            text (BeautifulSoup object): The html results from the page request
+        :return:
+            No return
+        """
         self.jobmap = jobmap_filter.findall(text)
-
-
-# def find_jobs(website, job_title, locations):
-#     if website == 'indeed':
-#         result = get_indeed_jobs(job_title, locations)
 
 
 # def get_indeed_jobs(job_title, locations):
@@ -148,14 +153,30 @@ class JobSearchScraper:
 
 
 def add_to_dataframe(job_data):
-
+    """
+    Not being used currently.
+    :param job_data:
+    :return:
+    """
     global dataframe
     for job in job_data:
         dataframe.loc[len(dataframe)] = job
 
  
 def find_job_title_indeed(card, titles_to_skip: [str], jobmap: [str]):
-    
+    """
+    Function that currently gets the job title, filters based on it, and calls check_entry_level_job which filters
+    based on experience requirements and if its valid gets the job URL.
+
+    Params:
+        card (BeautifulSoup object): The individual job posting card being processed
+        titles_to_skip ([str]): Array of strings entered by user used to filter out results based on job title
+        jobmap ([str]):
+
+    Returns:
+        str: The job title or empty string is result is being skipped
+        str: URL to individual job posting or empty string if being skipped
+    """
     title_text = card.find("h2", {"class":"title"})
     title = title_text.text.lower().strip()
 
@@ -165,7 +186,6 @@ def find_job_title_indeed(card, titles_to_skip: [str], jobmap: [str]):
             if title.find('\n') != -1:
                 title = title.split('\n')[0]
             return title, job_description_url
-    # print("invalid job title: " + title)
     return "", ""
 
 
@@ -186,7 +206,7 @@ def check_entry_level_job(soup, jobmap: [str]):
     return False, ""
     
     
-def find_company_indeed(card):
+def find_company_indeed(card) -> str:
     
     company_text = card.find('span', class_='company')
     if not company_text:
@@ -196,7 +216,7 @@ def find_company_indeed(card):
     return company
 
 
-def find_job_location_indeed(card):
+def find_job_location_indeed(card) -> str:
     
     location_text = card.find('span', class_='location')
     if not location_text:
@@ -206,7 +226,7 @@ def find_job_location_indeed(card):
     return location
 
     
-def find_job_post_date_indeed(card):
+def find_job_post_date_indeed(card) -> str:
     
     date_text = card.find('span', class_='date')
     date = date_text.text.strip()
@@ -214,7 +234,7 @@ def find_job_post_date_indeed(card):
     return date
 
 
-def find_job_post_summary_indeed(card):
+def find_job_post_summary_indeed(card) -> str:
 
     summary_text = card.find('div', class_='summary')
     summary = summary_text.text.strip().replace('\n', '')
@@ -222,7 +242,7 @@ def find_job_post_summary_indeed(card):
     return summary
 
 
-def get_indeed_jobs_count(page):
+def get_indeed_jobs_count(page) -> int:
 
     try:
         soup = BeautifulSoup(page.text, "lxml")
@@ -232,13 +252,3 @@ def get_indeed_jobs_count(page):
     except:
         print("failed to find total job coount for indeed search")
         return -1
-
-
-# def start_search(job_title: str, location: str, search_filters: {}, title_filters: [str]):
-
-
-# if __name__ == "__main__":
-#
-#     find_jobs("indeed", job_titles, search_locations)
-#     dataframe.drop_duplicates(subset=None, keep="first", inplace=True)
-#     dataframe.to_csv("test.csv", columns=cols)

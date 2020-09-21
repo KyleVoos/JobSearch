@@ -65,11 +65,11 @@ def get_locations(input_data):
 
 def get_search_filters(location: str, input_data: InputData):
 
-    filters = {'q': location}
+    filters = {'l': location}
 
     if location.lower().find("state") == -1:
-        cont = input("Search filters for {0}? (y/n)".format(location))
-        if cont != "Y" or cont != "y":
+        cont = input("Search filters for {0}? (y/n) ".format(location))
+        if cont == "Y" or cont == "y":
             print("Date Posted Filter:")
             print("1) Last 24 hours")
             print("2) Last 3 days")
@@ -101,7 +101,7 @@ def get_search_filters(location: str, input_data: InputData):
             while True:
                 try:
                     num = int(input("Selection: "))
-                    if num > 0 and num < 5:
+                    if num > 0 and num < 8:
                         filters['radius'] = selection[num - 1]
                     break
                 except ValueError:
