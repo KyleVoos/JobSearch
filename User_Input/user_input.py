@@ -1,4 +1,8 @@
 class InputData:
+    """
+
+
+    """
     locations = []
     job_titles = []
     title_filter_terms = []
@@ -8,14 +12,26 @@ class InputData:
     def add_job_titles(self, titles: [str]):
         self.job_titles = titles
 
+    def get_job_titles(self):
+        return self.job_titles
+
     def add_search_filter(self, key: str, values: {}):
         self.search_filters[key] = values
+
+    def get_search_filter(self, key: str):
+        return self.search_filters[key]
 
     def add_locations(self, loc: [str]):
         self.locations = loc
 
+    def get_locations(self):
+        return self.locations
+
     def add_title_filter_terms(self, filter_terms: [str]):
         self.title_filter_terms = filter_terms
+
+    def get_title_filters(self):
+        return self.title_filter_terms
 
 
 def parse_input(user_input: str):
