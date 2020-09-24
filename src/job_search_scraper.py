@@ -25,7 +25,6 @@ jobmap_card_filter = re.compile('jobmap\[([0-9]+)\]')
 vjs_filter = re.compile('(vjs=[0-9]+)')
 
 
-
 class JobSearchScraper:
     """
 
@@ -65,22 +64,22 @@ class JobSearchScraper:
         print("Searching for {0} jobs in {1}".format(self.title, self.location))
         url = ("https://www.indeed.com/jobs?q={0}&".format(self.title.replace(' ', '%20')) +
                urllib.parse.urlencode(self.search_filter))
-        response = requests.get(url)
+        response = send_request(url)
+        if not response:
+            return data
         soup = BeautifulSoup(response.content, "html.parser")
         total_pages = get_indeed_jobs_count(soup)
         for page_num in range(0, total_pages, jobs_per_page):
-            print("job: {0} | loc: {1} | page_num: {2}".format(self.title, self.location, page_num))
             if page_num == 0:
-
                 self.get_jobmap(response.text)
                 page_results = self.get_indeed_job_info(soup)
             else:
                 temp_url = "{0}&start={1}".format(url, page_num)
-                response = requests.get(temp_url)
-                self.get_jobmap(response.text)
-                if response.status_code != 200:
+                response = send_request(temp_url)
+                if not response:
                     print("request failed with status code " + response.status_code)
                     continue
+                self.get_jobmap(response.text)
                 soup = BeautifulSoup(response.content, "html.parser")
                 page_results = self.get_indeed_job_info(soup)
 
@@ -101,7 +100,7 @@ class JobSearchScraper:
             [[str]]: Results of search as 2d array of strings
         """
         data = []
-        # try:
+
         for card in soup.find_all('div', {'class': 'jobsearch-SerpJobCard unifiedRow row result'}):
             title, description_url = find_job_title_indeed(card, self.titles_to_skip, self.jobmap)
             if len(title) == 0:
@@ -165,22 +164,21 @@ class JobSearchScraper:
     #     print("fail")
 
 
-# def get_indeed_job_info(soup):
-#
-#     data = []
-#     # try:
-#     for card in soup.find_all('div', {'class':'jobsearch-SerpJobCard unifiedRow row result'}):
-#         title, description_url = find_job_title_indeed(card)
-#         if len(title) == 0:
-#             continue
-#         company_name = find_company_indeed(card)
-#         location = find_job_location_indeed(card)
-#         date_posted = find_job_post_date_indeed(card)
-#         summary = find_job_post_summary_indeed(card)
-#         data.append([title, location, company_name, date_posted, "not implemented", summary, description_url])
-    # add_to_dataframe(data)
-    # except:
-    #     print("get_indeed_job_info() exception")
+def send_request(url: str):
+
+    response = requests.get(url)
+
+    if response.status_code != 200:
+        return None
+
+    return response
+
+
+def get_job_id_indeed(card):
+
+    id = card['data-jk']
+
+    return id
 
 
 def add_to_dataframe(job_data):
@@ -210,7 +208,7 @@ def find_job_title_indeed(card, titles_to_skip: [str], jobmap: [str]):
         str: The job title or empty string is result is being skipped.
         str: URL to individual job posting or empty string if being skipped.
     """
-    title_text = card.find("h2", {"class":"title"})
+    title_text = card.find("h2", {"class": "title"})
     title = title_text.text.lower().strip()
 
     if not any(ele in title for ele in titles_to_skip):
@@ -224,6 +222,14 @@ def find_job_title_indeed(card, titles_to_skip: [str], jobmap: [str]):
 
 def check_entry_level_job(soup, jobmap: [str]):
     """
+    Function to check if a job is entry-level and extract the job description URL. To check whether a job is
+    entry-level or not an HTTP request is made to the job description URL. After the description text is found
+    a regex is used to search the text for any strings matching [1+]-[2+], [#] years. If anything is found the
+    job is not considered to be entry level and is left out of the results.
+
+    This function is also where the jobmap is used. Because some description URLs are built dynamically, and will
+    contain 'pagead' this is used to identify that using the jobmap is needed. Next a regular expression is used to
+    capture the jobmap IDs number from the HTML text and the job description URL is built.
 
     Args:
         soup (BeautifulSoup object): BS4 object of the job card being processed.
@@ -242,7 +248,9 @@ def check_entry_level_job(soup, jobmap: [str]):
             vjs = vjs_filter.search(job_description_url).group(1)
             job_description_url = "/viewjob?jk={0}&{1}".format(jobmap[int(jobmap_id)], vjs)
         job_description_url = "https://www.indeed.com" + job_description_url
-        response = requests.get(job_description_url)
+        response = send_request(job_description_url)
+        if not response:
+            break
         check = experience_filter.search(response.text)
         if not check:
             return True, job_description_url
@@ -255,17 +263,19 @@ def find_company_indeed(card) -> str:
     Processes an individual job card to find the name of the company that posted the job.
 
     Args:
-        card (BeautifulSoup object):
+        card (BeautifulSoup object): A BS4 object consisting of the section of the HTML doc result for a
+                                    single job posting (card taken from html div classname).
 
     Returns:
-        str: The company name found from the job card.
+        str: The company from the job card if found, otherwise empty string.
     """
     company_text = card.find('span', class_='company')
     if not company_text:
         company_text = card.find('div', class_='company')
-    company = company_text.text.strip()
-    
-    return company
+    if company_text:
+        return company_text.text.strip()
+
+    return ""
 
 
 def find_job_location_indeed(card) -> str:
@@ -277,14 +287,15 @@ def find_job_location_indeed(card) -> str:
                                     single job posting (card taken from html div classname).
 
     Returns:
-        str: The location scraped from the job card.
+        str: The location scraped from the job card if found, otherwise an empty string.
     """
     location_text = card.find('span', class_='location')
     if not location_text:
         location_text = card.find('div', class_='location')
-    location = location_text.text.strip()
+    if location_text:
+        return location_text.text.strip()
     
-    return location
+    return ""
 
     
 def find_job_post_date_indeed(card) -> str:
@@ -296,12 +307,13 @@ def find_job_post_date_indeed(card) -> str:
                                     single job posting (card taken from html div classname).
 
     Returns:
-        str: Date scraped from the job card.
+        str: Date scraped from the job card if found, otherwise empty string.
     """
     date_text = card.find('span', class_='date')
-    date = date_text.text.strip()
+    if date_text:
+        return date_text.text.strip()
     
-    return date
+    return ""
 
 
 def find_job_post_summary_indeed(card) -> str:
@@ -313,12 +325,13 @@ def find_job_post_summary_indeed(card) -> str:
                                     single job posting (card taken from html div classname).
 
     Returns:
-         str: Summary scraped from job card.
+         str: Summary scraped from job card if found, otherwise empty string.
     """
     summary_text = card.find('div', class_='summary')
-    summary = summary_text.text.strip().replace('\n', '')
+    if summary_text:
+        return summary_text.text.replace('\n', '').replace('.', '. ').strip();
 
-    return summary
+    return ""
 
 
 def get_indeed_jobs_count(soup) -> int:
