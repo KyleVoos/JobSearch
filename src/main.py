@@ -1,5 +1,5 @@
-from job_search_scraper import JobSearchScraper
-import User_Input.user_input as usr_input
+from src.job_search_scraper import JobSearchScraper
+import src.User_Input.user_input as usr_input
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 

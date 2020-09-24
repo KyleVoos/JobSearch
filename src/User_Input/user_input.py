@@ -52,7 +52,7 @@ def get_job_titles():
     while True:
         temp = input()
         if temp:
-            temp = temp.strip()
+            temp = ' '.join(temp.split())
             if len(temp) > 0:
                 job_titles.append(temp)
         elif not temp and len(job_titles) > 0:
