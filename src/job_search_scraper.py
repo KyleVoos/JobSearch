@@ -2,8 +2,12 @@
 Add an overview here later.
 
 TODO:
-    Split up find_job_title_indeed() and check_entry_level_job() so the functions are not getting
+    1) I should be able to change this from being a class and have everything continue to work correctly with
+    less complexity.
+    2) Split up find_job_title_indeed() and check_entry_level_job() so the functions are not getting
     job data and filtering job results.
+    3) Look into multi-threading requests for paginated job results, they are independent of each other so it would work
+    its just whether or not there would be a performance benefit and how many threads should I create.
 """
 import requests
 from bs4 import BeautifulSoup
@@ -16,7 +20,10 @@ base_url = "https://www.indeed.com/"
 # search_locations = ['Portland','Seattle','United States']#]
 # titles_to_skip = ['senior', 'front', 'frontend', '2021', 'sr', 'sr.', 'director', 'lead', 'principal', 'manager']
 experience_filter = re.compile('[2-9]\s*\+?-?\s*[1-9]?\s*[yY]e?a?[rR][sS]?')
-jobmap_filter = re.compile('jobmap\[[0-9]+\]=\s+{jk:\'(\w+)\'') #('jobmap\[[0-9]?\]=\s+{(.*)+}')'jobmap\[[0-9]+\]=\s+{.+}'
+jobmap_filter = re.compile('jobmap\[[0-9]+\]=\s+{jk:\'(\w+)\'')
+jobmap_card_filter = re.compile('jobmap\[([0-9]+)\]')
+vjs_filter = re.compile('(vjs=[0-9]+)')
+
 
 
 class JobSearchScraper:
@@ -59,11 +66,12 @@ class JobSearchScraper:
         url = ("https://www.indeed.com/jobs?q={0}&".format(self.title.replace(' ', '%20')) +
                urllib.parse.urlencode(self.search_filter))
         response = requests.get(url)
-        total_pages = get_indeed_jobs_count(response)
+        soup = BeautifulSoup(response.content, "html.parser")
+        total_pages = get_indeed_jobs_count(soup)
         for page_num in range(0, total_pages, jobs_per_page):
             print("job: {0} | loc: {1} | page_num: {2}".format(self.title, self.location, page_num))
             if page_num == 0:
-                soup = BeautifulSoup(response.content, "html.parser")
+
                 self.get_jobmap(response.text)
                 page_results = self.get_indeed_job_info(soup)
             else:
@@ -228,8 +236,10 @@ def check_entry_level_job(soup, jobmap: [str]):
     for link in soup.find_all("a"):
         job_description_url = link.get('href')
         if job_description_url.find('pagead') != -1:
-            jobmap_id = re.search('jobmap\[([0-9]+)\]', link.attrs['onclick']).group(1)
-            vjs = re.search('(vjs=[0-9]+)', job_description_url).group(1)
+            # jobmap_id = re.search('jobmap\[([0-9]+)\]', link.attrs['onclick']).group(1)
+            jobmap_id = jobmap_card_filter.search(link.attrs['onclick']).group(1)
+            # vjs = re.search('(vjs=[0-9]+)', job_description_url).group(1)
+            vjs = vjs_filter.search(job_description_url).group(1)
             job_description_url = "/viewjob?jk={0}&{1}".format(jobmap[int(jobmap_id)], vjs)
         job_description_url = "https://www.indeed.com" + job_description_url
         response = requests.get(job_description_url)
@@ -311,18 +321,17 @@ def find_job_post_summary_indeed(card) -> str:
     return summary
 
 
-def get_indeed_jobs_count(page) -> int:
+def get_indeed_jobs_count(soup) -> int:
     """
     Searches the original search query response for the total number of pages of results.
 
     Args:
-        page (BeautifulSoup object): BS4 object of the original response for title/location search.
+        soup (BeautifulSoup object): BS4 object of the original response for title/location search.
 
     Returns:
          int: Number of total pages of job search results.
     """
     try:
-        soup = BeautifulSoup(page.text, "lxml")
         text = soup.find('div', {'id': 'searchCountPages'}).get_text()
         total_jobs = int(text.split("of ")[1].split(' ')[0].replace(',', ''))
         return total_jobs
