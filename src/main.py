@@ -2,6 +2,7 @@ from src.job_search_scraper import JobSearchScraper
 import src.User_Input.user_input as usr_input
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
+import src.export_results as export_results
 
 
 def start_queries(user_input_vals):
@@ -21,16 +22,16 @@ def start_queries(user_input_vals):
             for loc in user_input_vals.get_locations():
                 scraper_instance = JobSearchScraper(job, loc, user_input_vals.get_title_filters(),
                                                     user_input_vals.get_search_filter(loc))
-                processes.append(executor.submit(scraper_instance.get_indeed_jobs))
+                processes.append(executor.submit(scraper_instance.get_indeed_jobs_multithread))
 
     job_ids_set = set()
 
     for task in as_completed(processes):
         data = task.result()
         for entry in data:
-            if entry[0] not in job_ids_set:
-                job_ids_set.add(entry[0])
-                dataframe.loc[len(dataframe)] = entry
+            # if entry[0] not in job_ids_set:
+            #     job_ids_set.add(entry[0])
+            dataframe.loc[len(dataframe)] = entry
 
 
 if __name__ == "__main__":
@@ -40,3 +41,7 @@ if __name__ == "__main__":
     processes = []
     input_vals = usr_input.get_user_input()
     start_queries(input_vals)
+    output_selection = usr_input.get_output_result_selection()
+    dataframe.drop_duplicates(subset=None, keep="first", inplace=True)
+    export_results.export_data(dataframe, output_selection)
+

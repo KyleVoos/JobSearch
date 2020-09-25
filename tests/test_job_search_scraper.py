@@ -80,9 +80,6 @@ class JobScraperTests(unittest.TestCase):
             self.assertIsNone(response)
 
     def test_find_job_post_summary_indeed_valid(self):
-        """
-        TODO: Fix the way that the space is removed after a period in a sentence.
-        """
         result = job_scraper.find_job_post_summary_indeed(self.valid_card)
         correct_res = "Design, develop and maintain complex software systems. Keep abreast of software development " \
                       "language revisions and technological advances."

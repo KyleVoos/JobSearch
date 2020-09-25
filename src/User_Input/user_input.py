@@ -153,3 +153,33 @@ def get_user_input():
     user_input_vals.add_title_filter_terms(get_title_filters())
 
     return user_input_vals
+
+
+def get_output_result_selection():
+    print("How would you like to output the results?")
+    print("1) Save to csv file")
+    print("2) Email csv file to yourself")
+    print("3) Store in local MySQL database")
+
+    while True:
+        temp = int(input())
+        if temp > 0 and temp < 4:
+            return temp
+
+
+def get_csv_filename():
+    result = input("Enter a filename to save as: ")
+
+    return result
+
+
+def get_user_email():
+    email = input("Enter your email address: ")
+
+    return email
+
+
+def get_user_password():
+    password = input("Enter you email password (email is sent from yourself to yourself): ")
+
+    return password

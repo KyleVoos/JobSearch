@@ -1,8 +1,9 @@
 import smtplib
 from email.message import EmailMessage
+import src.User_Input.user_input as user_input
 
 smtp_server_dict = {'gmail': ('smtp.gmail.com', 587), 'outlook': ('smtp.office365.com', 587)}
-cols = ['Job_Title', 'Location', 'Company', 'Date', 'Salary', 'Description', 'url']
+cols = ['Job_ID', 'Job_Title', 'Location', 'Company', 'Date', 'Salary', 'Description', 'url']
 
 
 def send_email(email: str, password: str, email_type: str, content):
@@ -26,4 +27,17 @@ def send_email(email: str, password: str, email_type: str, content):
 
 def save_to_csv(data, filename: str):
 
+    if filename.find(".csv") == -1:
+        filename += ".csv"
     data.to_csv(filename, columns=cols)
+
+
+def export_data(data, selection: int):
+
+    if selection == 1:
+        filename = user_input.get_csv_filename()
+        save_to_csv(data, filename)
+    elif selection == 2:
+        email = user_input.get_user_email()
+        password = user_input.get_user_password()
+        send_email(email, password, "outlook", data)

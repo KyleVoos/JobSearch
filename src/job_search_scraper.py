@@ -13,12 +13,11 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import urllib
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from time import sleep
 
 
 base_url = "https://www.indeed.com/"
-# job_titles = ['Software Developer', 'sdet', 'junior software engineer', 'qa engineer']#['Software Developer', 'software engineer', 'sdet', 'junior software engineer', 'junior software developer', 'qa engineer']
-# search_locations = ['Portland','Seattle','United States']#]
-# titles_to_skip = ['senior', 'front', 'frontend', '2021', 'sr', 'sr.', 'director', 'lead', 'principal', 'manager']
 experience_filter = re.compile('[2-9]\s*\+?-?\s*[1-9]?\s*[yY]e?a?[rR][sS]?')
 jobmap_filter = re.compile('jobmap\[[0-9]+\]=\s+{jk:\'(\w+)\'')
 jobmap_card_filter = re.compile('jobmap\[([0-9]+)\]')
@@ -64,30 +63,84 @@ class JobSearchScraper:
         print("Searching for {0} jobs in {1}".format(self.title, self.location))
         url = ("https://www.indeed.com/jobs?q={0}&".format(self.title.replace(' ', '%20')) +
                urllib.parse.urlencode(self.search_filter))
-        response = send_request(url)
+        response = send_request(url, {})
         if not response:
             return data
         soup = BeautifulSoup(response.content, "html.parser")
         total_pages = get_indeed_jobs_count(soup)
+        print("Searching for {0} jobs in {1} | total pages found: {2}".format(self.title, self.location, total_pages))
         for page_num in range(0, total_pages, jobs_per_page):
             if page_num == 0:
                 self.get_jobmap(response.text)
-                page_results = self.get_indeed_job_info(soup)
+                page_results = self.get_indeed_job_info(soup, self.jobmap)
             else:
                 temp_url = "{0}&start={1}".format(url, page_num)
-                response = send_request(temp_url)
+                response = send_request(temp_url, {})
                 if not response:
                     print("request failed with status code " + response.status_code)
                     continue
                 self.get_jobmap(response.text)
                 soup = BeautifulSoup(response.content, "html.parser")
-                page_results = self.get_indeed_job_info(soup)
+                page_results = self.get_indeed_job_info(soup, self.jobmap)
 
             data.extend(page_results)
 
         return data
 
-    def get_indeed_job_info(self, soup):
+    def get_indeed_jobs_multithread(self):
+        """
+        The entry point for a job search. Starts by getting the total number of jobs pages.
+        After total job count is found a new thread is spawned for every 50 pages of results,
+        (step size is 10, 500 / 10 = 50). Each thread stores its own results which are then combined when
+        all threads have finished.
+
+        Returns:
+            [[str]]: 2d array holding all the results for the job title/location query.
+        """
+        data = []
+        processes = []
+
+        url = ("https://www.indeed.com/jobs?q={0}&".format(self.title.replace(' ', '%20')))
+        response = send_request(url, self.search_filter)
+        if not response:
+            return data
+        soup = BeautifulSoup(response.content, "html.parser")
+        total_pages = get_indeed_jobs_count(soup)
+        # print("Searching for {0} jobs in {1} | total pages found: {2}".format(self.title, self.location, total_pages))
+        with ThreadPoolExecutor() as executor:
+            for page_start in range(0, total_pages, 500):
+                page_end = page_start + 500 if page_start + 500 < total_pages else total_pages
+                processes.append(executor.submit(self.get_jobs_pages, page_start, page_end))
+
+        for task in as_completed(processes):
+            data.extend(task.result())
+
+        return data
+
+    def get_jobs_pages(self, start_page, end_page):
+        data = []
+        print("start_page: {0} | end_page: {1}".format(start_page, end_page))
+        print("Searching for {0} jobs in {1}".format(self.title, self.location))
+        url = ("https://www.indeed.com/jobs?q={0}&".format(self.title.replace(' ', '%20')) +
+               urllib.parse.urlencode(self.search_filter))
+        for page_num in range(start_page, end_page, 10):
+
+            temp_url = "{0}&start={1}".format(url, page_num)
+            response = send_request(temp_url, self.search_filter)
+            if not response:
+                print("request failed with status code {0} | title: {1} | loc: {2}".format(response.status_code,
+                                                                                           self.title, self.location))
+                continue
+            local_jobmap = get_jobmap_multi(response.text)
+            soup = BeautifulSoup(response.content, "html.parser")
+            page_results = self.get_indeed_job_info(soup, local_jobmap)
+            data.extend(page_results)
+            print("start_page: {0} | end_page: {1} | page_num: {2} | len(data): {3}".format(start_page, end_page, page_num, len(data)))
+            sleep(1.0)
+
+        return data
+
+    def get_indeed_job_info(self, soup, jobmap):
         """
         Function that iterates through each of the job postings on a page of job search results
         With BeautifulSoup each 'card' is found on the page and then processed individually. Each
@@ -102,7 +155,7 @@ class JobSearchScraper:
         data = []
 
         for card in soup.find_all('div', {'class': 'jobsearch-SerpJobCard unifiedRow row result'}):
-            title, description_url = find_job_title_indeed(card, self.titles_to_skip, self.jobmap)
+            title, description_url = find_job_title_indeed(card, self.titles_to_skip, jobmap)
             if len(title) == 0:
                 continue
             job_id = get_job_id_indeed(card)
@@ -129,45 +182,13 @@ class JobSearchScraper:
         self.jobmap = jobmap_filter.findall(text)
 
 
-# def get_indeed_jobs(job_title, locations):
-#
-#     page_num = 0
-#     jobs_per_page = 10
-#     global jobmap
-#     # try:
-#     for job in  job_title:
-#         for loc in locations:
-#             print("Searching for {0} jobs in {1}".format(job, loc))
-#             url = "https://www.indeed.com/jobs?q={0}&l={1}&fromage=14".format(job.replace(' ', '%20'),
-#                                                                               loc.replace(' ', '+'))
-#             response = requests.get(url)
-#             total_pages = get_indeed_jobs_count(response)
-#             print("total_pages: {0}".format(total_pages))
-#             for page_num in range(0, total_pages, jobs_per_page):
-#                 print("page_num: {0}".format(page_num))
-#                 if page_num == 0:
-#                     soup = BeautifulSoup(response.content, "html.parser")
-#                     get_jobmap(response.text)
-#                     get_indeed_job_info(soup)
-#                 else:
-#                     temp_url = "{0}&start={1}".format(url, page_num)
-#                     # print(temp_url)
-#                     response = requests.get(temp_url)
-#                     get_jobmap(response.text)
-#                     if response.status_code != 200:
-#                         print("request failed with status code " + response.status_code)
-#                         continue
-#                     soup = BeautifulSoup(response.content, "html.parser")
-#                     temp = soup
-#                     get_indeed_job_info(soup)
-#             print("dataframe len: {0}".format(len(dataframe)))
-    # except:
-    #     print("fail")
+def get_jobmap_multi(text):
+    return jobmap_filter.findall(text)
 
 
-def send_request(url: str):
+def send_request(url: str, args):
 
-    response = requests.get(url)
+    response = requests.get(url, params=args)
 
     if response.status_code != 200:
         return None
@@ -181,19 +202,6 @@ def get_job_id_indeed(card):
         return card['data-jk']
 
     return ""
-
-
-def add_to_dataframe(job_data):
-    """
-    Not being used currently.
-    Args:
-     job_data:
-
-    Returns:
-    """
-    global dataframe
-    for job in job_data:
-        dataframe.loc[len(dataframe)] = job
 
  
 def find_job_title_indeed(card, titles_to_skip: [str], jobmap: [str]):
@@ -215,8 +223,10 @@ def find_job_title_indeed(card, titles_to_skip: [str], jobmap: [str]):
         title = title_text.text.lower().strip()
 
         if not any(ele in title for ele in titles_to_skip):
-            valid, job_description_url = check_entry_level_job(title_text, jobmap)
-            if valid:
+            # valid, job_description_url = check_entry_level_job(title_text, jobmap)
+            # if valid:
+            job_description_url = get_description_url(title_text, jobmap)
+            if job_description_url:
                 if title.find('\n') != -1:
                     title = title.split('\n')[0]
                 return title, job_description_url
@@ -251,7 +261,8 @@ def check_entry_level_job(soup, jobmap: [str]):
             vjs = vjs_filter.search(job_description_url).group(1)
             job_description_url = "/viewjob?jk={0}&{1}".format(jobmap[int(jobmap_id)], vjs)
         job_description_url = "https://www.indeed.com" + job_description_url
-        response = send_request(job_description_url)
+        response = send_request(job_description_url, {})
+        sleep(0.1)
         if not response:
             break
         check = experience_filter.search(response.text)
@@ -259,6 +270,33 @@ def check_entry_level_job(soup, jobmap: [str]):
             return True, job_description_url
 
     return False, ""
+
+
+def get_description_url(soup, jobmap):
+
+    for link in soup.find_all("a"):
+        job_description_url = link.get('href')
+        if job_description_url.find('pagead') != -1:
+            # jobmap_id = re.search('jobmap\[([0-9]+)\]', link.attrs['onclick']).group(1)
+            jobmap_id = jobmap_card_filter.search(link.attrs['onclick']).group(1)
+            # vjs = re.search('(vjs=[0-9]+)', job_description_url).group(1)
+            vjs = vjs_filter.search(job_description_url).group(1)
+            job_description_url = "/viewjob?jk={0}&{1}".format(jobmap[int(jobmap_id)], vjs)
+        job_description_url = "https://www.indeed.com" + job_description_url
+        response = send_request(job_description_url, {})
+        if not response:
+            break
+        sleep(0.1)
+        if check_description_requirements(response.text):
+            return job_description_url
+
+        return None
+
+
+def check_description_requirements(text):
+    check = experience_filter.search(text)
+
+    return check is None
     
     
 def find_company_indeed(card) -> str:
@@ -352,5 +390,5 @@ def get_indeed_jobs_count(soup) -> int:
         total_jobs = int(text.split("of ")[1].split(' ')[0].replace(',', ''))
         return total_jobs
     except:
-        print("failed to find total job coount for indeed search")
+        print("failed to find total job count for indeed search")
         return -1
