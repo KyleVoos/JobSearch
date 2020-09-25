@@ -23,15 +23,19 @@ def start_queries(user_input_vals):
                                                     user_input_vals.get_search_filter(loc))
                 processes.append(executor.submit(scraper_instance.get_indeed_jobs))
 
+    job_ids_set = set()
+
     for task in as_completed(processes):
         data = task.result()
         for entry in data:
-            dataframe.loc[len(dataframe)] = entry
+            if entry[0] not in job_ids_set:
+                job_ids_set.add(entry[0])
+                dataframe.loc[len(dataframe)] = entry
 
 
 if __name__ == "__main__":
 
-    cols = ['Job_Title', 'Location', 'Company', 'Date', 'Salary', 'Description', 'url']
+    cols = ['Job_ID', 'Job_Title', 'Location', 'Company', 'Date', 'Salary', 'Description', 'url']
     dataframe = pd.DataFrame(columns=cols)
     processes = []
     input_vals = usr_input.get_user_input()

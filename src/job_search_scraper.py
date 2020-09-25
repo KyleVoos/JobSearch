@@ -105,11 +105,12 @@ class JobSearchScraper:
             title, description_url = find_job_title_indeed(card, self.titles_to_skip, self.jobmap)
             if len(title) == 0:
                 continue
+            job_id = get_job_id_indeed(card)
             company_name = find_company_indeed(card)
             location = find_job_location_indeed(card)
             date_posted = find_job_post_date_indeed(card)
             summary = find_job_post_summary_indeed(card)
-            data.append([title, location, company_name, date_posted, "not implemented", summary, description_url])
+            data.append([job_id, title, location, company_name, date_posted, "None", summary, description_url])
 
         return data
 
@@ -176,9 +177,10 @@ def send_request(url: str):
 
 def get_job_id_indeed(card):
 
-    id = card['data-jk']
+    if card['data-jk']:
+        return card['data-jk']
 
-    return id
+    return ""
 
 
 def add_to_dataframe(job_data):
