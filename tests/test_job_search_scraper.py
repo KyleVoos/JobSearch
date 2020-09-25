@@ -100,6 +100,24 @@ class JobScraperTests(unittest.TestCase):
         result = job_scraper.get_indeed_jobs_count(self.invalid_search_count_pages)
         self.assertEqual(result, -1)
 
+    @patch('src.job_search_scraper.check_entry_level_job')
+    def test_find_job_title_indeed_valid(self, mock_return):
+        mock_return.return_value = True, "https://placeholder.xyz"
+        result = job_scraper.find_job_title_indeed(self.valid_card, [], [])
+        self.assertEqual(result, (".net developer ( oregon state)", "https://placeholder.xyz"))
+
+    @patch('src.job_search_scraper.check_entry_level_job')
+    def test_find_job_title_indeed_invalid(self, mock_return):
+        mock_return.return_value = True, "https://placeholder.xyz"
+        result = job_scraper.find_job_title_indeed(self.invalid_card, [], [])
+        self.assertEqual(result, ("", ""))
+
+    @patch('src.job_search_scraper.check_entry_level_job')
+    def test_find_job_title_indeed_filter(self, mock_return):
+        mock_return.return_value = True, "https://placeholder.xyz"
+        result = job_scraper.find_job_title_indeed(self.invalid_card, ['.net'], [])
+        self.assertEqual(result, ("", ""))
+
     @unittest.skip
     def test_get_jobmap_valid(self):
         self.scraper.get_jobmap(self.search_fullpage)
