@@ -211,14 +211,15 @@ def find_job_title_indeed(card, titles_to_skip: [str], jobmap: [str]):
         str: URL to individual job posting or empty string if being skipped.
     """
     title_text = card.find("h2", {"class": "title"})
-    title = title_text.text.lower().strip()
+    if title_text:
+        title = title_text.text.lower().strip()
 
-    if not any(ele in title for ele in titles_to_skip):
-        valid, job_description_url = check_entry_level_job(title_text, jobmap)
-        if valid:
-            if title.find('\n') != -1:
-                title = title.split('\n')[0]
-            return title, job_description_url
+        if not any(ele in title for ele in titles_to_skip):
+            valid, job_description_url = check_entry_level_job(title_text, jobmap)
+            if valid:
+                if title.find('\n') != -1:
+                    title = title.split('\n')[0]
+                return title, job_description_url
     return "", ""
 
 
