@@ -69,15 +69,24 @@ class JobScraperTests(unittest.TestCase):
             url = "http://google.com"
             mock_request.return_value.status_code = 200
             mock_request.return_value.content = "Some mock content"
-            response = job_scraper.send_request(url)
+            response = job_scraper.send_request(url, {})
             self.assertIsNotNone(response)
 
     def test_send_request_invalid(self):
         with patch('src.job_search_scraper.requests.get') as mock_request:
             url = "http://google.com"
             mock_request.return_value.status_code = 404
-            response = job_scraper.send_request(url)
+            response = job_scraper.send_request(url, {})
             self.assertIsNone(response)
+            mock_request.assert_called_once_with(url, params={})
+
+    def test_check_description_requirements(self):
+        result = job_scraper.check_description_requirements("the is the 5 things I don't need. 4+ lorum ipsum")
+        self.assertTrue(result)
+        result = job_scraper.check_description_requirements(".NET 4+ years of production experience")
+        self.assertFalse(result)
+        result = job_scraper.check_description_requirements(".NET 3-5 years")
+        self.assertFalse(result)
 
     def test_find_job_post_summary_indeed_valid(self):
         result = job_scraper.find_job_post_summary_indeed(self.valid_card)
@@ -97,23 +106,26 @@ class JobScraperTests(unittest.TestCase):
         result = job_scraper.get_indeed_jobs_count(self.invalid_search_count_pages)
         self.assertEqual(result, -1)
 
-    @patch('src.job_search_scraper.check_entry_level_job')
+    @patch('src.job_search_scraper.get_description_url')
     def test_find_job_title_indeed_valid(self, mock_return):
-        mock_return.return_value = True, "https://placeholder.xyz"
+        mock_return.return_value = "https://placeholder.xyz"
         result = job_scraper.find_job_title_indeed(self.valid_card, [], [])
         self.assertEqual(result, (".net developer ( oregon state)", "https://placeholder.xyz"))
+        mock_return.assert_called_once_with(self.valid_card.find("h2", {"class": "title"}), [])
 
-    @patch('src.job_search_scraper.check_entry_level_job')
+    @patch('src.job_search_scraper.get_description_url')
     def test_find_job_title_indeed_invalid(self, mock_return):
-        mock_return.return_value = True, "https://placeholder.xyz"
+        mock_return.return_value = "https://placeholder.xyz"
         result = job_scraper.find_job_title_indeed(self.invalid_card, [], [])
         self.assertEqual(result, ("", ""))
+        mock_return.assert_not_called()
 
-    @patch('src.job_search_scraper.check_entry_level_job')
+    @patch('src.job_search_scraper.get_description_url')
     def test_find_job_title_indeed_filter(self, mock_return):
         mock_return.return_value = True, "https://placeholder.xyz"
         result = job_scraper.find_job_title_indeed(self.invalid_card, ['.net'], [])
         self.assertEqual(result, ("", ""))
+        mock_return.assert_not_called()
 
     @unittest.skip
     def test_get_jobmap_valid(self):
@@ -124,6 +136,19 @@ class JobScraperTests(unittest.TestCase):
             '3e617ed9345ab519', '65d6ab603cf5416d', '5b9883ee8f907146', '4cf15a0a73ed4489', '48f0254f3fee04a4',
         ]
         self.assertEqual(self.scraper.jobmap, jobmap_ids)
+
+    def test_get_job_id_indeed_valid(self):
+        card = self.valid_card.find('div', {'class': 'jobsearch-SerpJobCard unifiedRow row result'})
+        result = job_scraper.get_job_id_indeed(card)
+        self.assertEqual(result, "09c72f50e34a9383")
+
+    def test_get_job_id_indeed_invalid(self):
+        card = self.invalid_card.find('div', {'class': 'jobsearch-SerpJobCard unifiedRow row result'})
+        result = job_scraper.get_job_id_indeed(card)
+        self.assertEqual(result, "")
+        # shouldn't be possible but testing to make sure it still works
+        result = job_scraper.get_job_id_indeed(self.invalid_card)
+        self.assertEqual(result, "")
 
 
 if __name__ == '__main__':

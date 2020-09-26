@@ -6,8 +6,7 @@ TODO:
     less complexity.
     2) Split up find_job_title_indeed() and check_entry_level_job() so the functions are not getting
     job data and filtering job results.
-    3) Look into multi-threading requests for paginated job results, they are independent of each other so it would work
-    its just whether or not there would be a performance benefit and how many threads should I create.
+    3) Test to find optimal number of threads to create.
 """
 import requests
 from bs4 import BeautifulSoup
@@ -198,7 +197,7 @@ def send_request(url: str, args):
 
 def get_job_id_indeed(card):
 
-    if card['data-jk']:
+    if card and 'data-jk' in card.attrs:
         return card['data-jk']
 
     return ""
@@ -370,7 +369,7 @@ def find_job_post_summary_indeed(card) -> str:
     """
     summary_text = card.find('div', class_='summary')
     if summary_text:
-        return summary_text.text.replace('\n', '').replace('.', '. ').strip();
+        return summary_text.text.replace('\n', '').replace('.', '. ').strip()
 
     return ""
 
