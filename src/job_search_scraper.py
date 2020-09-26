@@ -117,12 +117,12 @@ class JobSearchScraper:
 
         return data
 
-    def get_jobs_pages(self, start_page, end_page):
+    def get_jobs_pages(self, start_page: int, end_page: int) -> [[str]]:
         data = []
         print("start_page: {0} | end_page: {1}".format(start_page, end_page))
         print("Searching for {0} jobs in {1}".format(self.title, self.location))
-        url = ("https://www.indeed.com/jobs?q={0}&".format(self.title.replace(' ', '%20')) +
-               urllib.parse.urlencode(self.search_filter))
+        url = "https://www.indeed.com/jobs?q={0}&".format(self.title.replace(' ', '%20'))
+               # + urllib.parse.urlencode(self.search_filter))
         for page_num in range(start_page, end_page, 10):
 
             temp_url = "{0}&start={1}".format(url, page_num)
@@ -183,12 +183,38 @@ class JobSearchScraper:
 
 
 def get_jobmap_multi(text):
+    """
+    TODO: I just realized the value I need in the jobmap is the job ID, this function is not unnecessary and
+          can be removed by passing the job ID after its found.
+
+    Some of the links for job descriptions are created dynamically, this function finds the JavaScript
+    values of the jobmap[] variable in a script of the html doc returned from the original page request.
+    All of the jobmap values are found with a regex capture.
+
+    Args:
+        text (str): The HTML doc returned from the original or paginated requests represented as a string.
+
+    Returns:
+         [str]: An array of strings containing the jk value needed to built the URL for the job description.
+    """
     return jobmap_filter.findall(text)
 
 
-def send_request(url: str, args):
+def send_request(url: str, queries: {}):
+    """
+    Used to send all HTTP requests. A base URL is passed along with a dictionary that contains any
+    query strings that need to be added and encoded which is done by requests.
 
-    response = requests.get(url, params=args)
+    Args:
+        url (str): The base request URL.
+        queries (dict): Dictionary containing the key/value pairs used to build remaining URL query statements.
+
+    Returns:
+         requests object: Object returned by the HTTP request after completing. If request was unsuccessful
+                            None is returned instead.
+    """
+
+    response = requests.get(url, params=queries)
 
     if response.status_code != 200:
         return None
@@ -197,6 +223,17 @@ def send_request(url: str, args):
 
 
 def get_job_id_indeed(card):
+    """
+    Function to retrieve the job ID from an HTML tag in the <div class='jobsearch-SerpJobCard unifiedRow row result'.
+    The job ID appears to be unique for each job and is used to remove duplicate results and later may be
+    used as the primary key for an SQL database table.
+
+    Args:
+        card (BeautifulSoup object): The individual job posting card being processed.
+
+    Returns:
+        str: The job ID if found, otherwise an empty string.
+    """
 
     if card['data-jk']:
         return card['data-jk']
@@ -294,6 +331,15 @@ def get_description_url(soup, jobmap):
 
 
 def check_description_requirements(text):
+    """
+    Uses a regex to check whether the job description has requirements for years of experience or not.
+
+    Args:
+        text (str): The HTML doc represented as a string from the HTTP request for the job description.
+
+    Returns:
+        bool: True if the job is entry level (the experience filter did not capture anything), otherwise False.
+    """
     check = experience_filter.search(text)
 
     return check is None
