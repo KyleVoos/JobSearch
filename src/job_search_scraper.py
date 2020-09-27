@@ -124,7 +124,6 @@ class JobSearchScraper:
         url = "https://www.indeed.com/jobs?q={0}&".format(self.title.replace(' ', '%20'))
                # + urllib.parse.urlencode(self.search_filter))
         for page_num in range(start_page, end_page, 10):
-
             temp_url = "{0}&start={1}".format(url, page_num)
             response = send_request(temp_url, self.search_filter)
             if not response:
@@ -140,7 +139,7 @@ class JobSearchScraper:
 
         return data
 
-    def get_indeed_job_info(self, soup, jobmap):
+    def get_indeed_job_info(self, soup: BeautifulSoup, jobmap: [str]):
         """
         Function that iterates through each of the job postings on a page of job search results
         With BeautifulSoup each 'card' is found on the page and then processed individually. Each
@@ -155,9 +154,13 @@ class JobSearchScraper:
         data = []
 
         for card in soup.find_all('div', {'class': 'jobsearch-SerpJobCard unifiedRow row result'}):
-            title, description_url = find_job_title_indeed(card, self.titles_to_skip, jobmap)
-            if len(title) == 0:
+            title = get_job_title_indeed(card)
+            if not check_valid_job_title(title, self.titles_to_skip):
                 continue
+            # title, description_url = find_job_title_indeed(card, self.titles_to_skip, jobmap)
+            # if len(title) == 0:
+            #     continue
+            description_url = get_description_url(card.find("h2", {"class": "title"}), jobmap)
             job_id = get_job_id_indeed(card)
             company_name = find_company_indeed(card)
             location = find_job_location_indeed(card)
@@ -182,7 +185,7 @@ class JobSearchScraper:
         self.jobmap = jobmap_filter.findall(text)
 
 
-def get_jobmap_multi(text):
+def get_jobmap_multi(text: str):
     """
     TODO: I just realized the value I need in the jobmap is the job ID, this function is not unnecessary and
           can be removed by passing the job ID after its found.
@@ -213,7 +216,6 @@ def send_request(url: str, queries: {}):
          requests object: Object returned by the HTTP request after completing. If request was unsuccessful
                             None is returned instead.
     """
-
     response = requests.get(url, params=queries)
 
     if response.status_code != 200:
@@ -222,7 +224,7 @@ def send_request(url: str, queries: {}):
     return response
 
 
-def get_job_id_indeed(card):
+def get_job_id_indeed(card: BeautifulSoup) -> str:
     """
     Function to retrieve the job ID from an HTML tag in the <div class='jobsearch-SerpJobCard unifiedRow row result'.
     The job ID appears to be unique for each job and is used to remove duplicate results and later may be
@@ -234,13 +236,24 @@ def get_job_id_indeed(card):
     Returns:
         str: The job ID if found, otherwise an empty string.
     """
-
     if card['data-jk']:
         return card['data-jk']
 
     return ""
 
- 
+
+def get_job_title_indeed(card: BeautifulSoup) -> str:
+    title_text = card.find("h2", {"class": "title"})
+    if title_text:
+        return title_text.text.lower().strip()
+
+    return ""
+
+
+def check_valid_job_title(title: str, titles_to_skip: [str]) -> bool:
+    return not any(ele in title for ele in titles_to_skip)
+
+
 def find_job_title_indeed(card, titles_to_skip: [str], jobmap: [str]):
     """
     Function that currently gets the job title, filters based on it, and calls check_entry_level_job which filters
@@ -309,7 +322,7 @@ def check_entry_level_job(soup, jobmap: [str]):
     return False, ""
 
 
-def get_description_url(soup, jobmap):
+def get_description_url(soup: BeautifulSoup, jobmap: [str]) -> str:
 
     for link in soup.find_all("a"):
         job_description_url = link.get('href')
@@ -327,10 +340,10 @@ def get_description_url(soup, jobmap):
         if check_description_requirements(response.text):
             return job_description_url
 
-        return None
+        return ""
 
 
-def check_description_requirements(text):
+def check_description_requirements(text: str) -> bool:
     """
     Uses a regex to check whether the job description has requirements for years of experience or not.
 
@@ -345,7 +358,7 @@ def check_description_requirements(text):
     return check is None
     
     
-def find_company_indeed(card) -> str:
+def find_company_indeed(card: BeautifulSoup) -> str:
     """
     Processes an individual job card to find the name of the company that posted the job.
 
@@ -365,7 +378,7 @@ def find_company_indeed(card) -> str:
     return ""
 
 
-def find_job_location_indeed(card) -> str:
+def find_job_location_indeed(card: BeautifulSoup) -> str:
     """
     Scrapes the jobs location from an individual job card.
     
@@ -385,7 +398,7 @@ def find_job_location_indeed(card) -> str:
     return ""
 
     
-def find_job_post_date_indeed(card) -> str:
+def find_job_post_date_indeed(card: BeautifulSoup) -> str:
     """
     Scrapes the date the job was posted from an individual job card.
 
@@ -403,7 +416,7 @@ def find_job_post_date_indeed(card) -> str:
     return ""
 
 
-def find_job_post_summary_indeed(card) -> str:
+def find_job_post_summary_indeed(card: BeautifulSoup) -> str:
     """
     Scrapes the summary of the job from an individual job card.
 
@@ -416,12 +429,12 @@ def find_job_post_summary_indeed(card) -> str:
     """
     summary_text = card.find('div', class_='summary')
     if summary_text:
-        return summary_text.text.replace('\n', '').replace('.', '. ').strip();
+        return summary_text.text.replace('\n', '').replace('.', '. ').strip()
 
     return ""
 
 
-def get_indeed_jobs_count(soup) -> int:
+def get_indeed_jobs_count(soup: BeautifulSoup) -> int:
     """
     Searches the original search query response for the total number of pages of results.
 
