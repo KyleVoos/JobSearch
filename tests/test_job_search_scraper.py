@@ -5,7 +5,7 @@ TODO:
     3) Look into unit tests for requests.
 """
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from bs4 import BeautifulSoup
 import src.job_search_scraper as job_scraper
 from pathlib import Path
@@ -32,8 +32,46 @@ class JobScraperTests(unittest.TestCase):
         self.invalid_search_count_pages = BeautifulSoup(f.read(), "html.parser")
         f.close()
         f = (Path(__file__).parent / "data/test_job_search_fullpage.html").open()
+        self.fullpage = BeautifulSoup(f.read(), "html.parser")
         self.search_fullpage = mmap(f.fileno(), 0, access=ACCESS_READ).read().decode("utf-8")
         f.close()
+
+    @patch.multiple('src.job_search_scraper',
+                    get_job_title_indeed=MagicMock(return_value=".net developer (oregon state)"),
+                    check_valid_job_title=MagicMock(return_value=True),
+                    get_description_url=MagicMock(
+                        return_value="https://www.indeed.com/viewjob?jk=09c72f50e34a9383&vjs=3"),
+                    get_job_id_indeed=MagicMock(return_value="09c72f50e34a9383"),
+                    find_company_indeed=MagicMock(return_value="Hexacta"),
+                    find_job_location_indeed=MagicMock(return_value="Oregon City, OR"),
+                    find_job_post_date_indeed=MagicMock(return_value="24 days ago"),
+                    find_job_post_summary_indeed=MagicMock(return_value="Design, develop and maintain complex"
+                                                                        " software systems. Keep abreast of software"
+                                                                        " development language revisions and"
+                                                                        " technological advances."))
+    def test_get_indeed_job_info_single(self):
+        result = self.scraper.get_indeed_job_info(self.valid_card, [])
+        arr = [["09c72f50e34a9383", ".net developer (oregon state)", "Oregon City, OR", "Hexacta", "24 days ago",
+               "None", "Design, develop and maintain complex software systems. Keep abreast of software development"
+                       " language revisions and technological advances.",
+               "https://www.indeed.com/viewjob?jk=09c72f50e34a9383&vjs=3"]]
+        self.assertEqual(result, arr)
+
+    @patch.multiple('src.job_search_scraper',
+                    get_job_title_indeed=MagicMock(side_effect=["title1", "title2", "title3", "title4", "title5"]),
+                    check_valid_job_title=MagicMock(side_effect=[True, True, False, True, False]),
+                    get_description_url=MagicMock(side_effect=["url1", "url2", "url3"]),
+                    get_job_id_indeed=MagicMock(side_effect=["id1", "id2", "id3"]),
+                    find_company_indeed=MagicMock(side_effect=["comp1", "comp2", "comp3"]),
+                    find_job_location_indeed=MagicMock(side_effect=["loc1", "loc2", "loc3"]),
+                    find_job_post_date_indeed=MagicMock(side_effect=["date1", "date2", "date3"]),
+                    find_job_post_summary_indeed=MagicMock(side_effect=["summary1", "summary2", "summary3"]))
+    def test_get_indeed_job_info_multiple(self):
+        result = self.scraper.get_indeed_job_info(self.fullpage, [])
+        arr = [["id1", "title1", "loc1", "comp1", "date1", "None", "summary1", "url1"],
+               ["id2", "title2", "loc2", "comp2", "date2", "None", "summary2", "url2"],
+               ["id3", "title4", "loc3", "comp3", "date3", "None", "summary3", "url3"]]
+        self.assertEqual(result, arr)
 
     def test_find_company_indeed_valid(self):
         result = job_scraper.find_company_indeed(self.valid_card)
@@ -106,26 +144,28 @@ class JobScraperTests(unittest.TestCase):
         result = job_scraper.get_indeed_jobs_count(self.invalid_search_count_pages)
         self.assertEqual(result, -1)
 
-    @patch('src.job_search_scraper.get_description_url')
-    def test_find_job_title_indeed_valid(self, mock_return):
-        mock_return.return_value = "https://placeholder.xyz"
-        result = job_scraper.find_job_title_indeed(self.valid_card, [], [])
-        self.assertEqual(result, (".net developer ( oregon state)", "https://placeholder.xyz"))
-        mock_return.assert_called_once_with(self.valid_card.find("h2", {"class": "title"}), [])
+    def test_get_job_title_indeed_valid(self):
+        result = job_scraper.get_job_title_indeed(self.valid_card)
+        self.assertEqual(result, ".net developer (oregon state)")
 
-    @patch('src.job_search_scraper.get_description_url')
-    def test_find_job_title_indeed_invalid(self, mock_return):
-        mock_return.return_value = "https://placeholder.xyz"
-        result = job_scraper.find_job_title_indeed(self.invalid_card, [], [])
-        self.assertEqual(result, ("", ""))
-        mock_return.assert_not_called()
+    def test_get_job_title_indeed_invalid(self):
+        result = job_scraper.get_job_title_indeed(self.invalid_card)
+        self.assertEqual(result, "")
 
-    @patch('src.job_search_scraper.get_description_url')
-    def test_find_job_title_indeed_filter(self, mock_return):
-        mock_return.return_value = True, "https://placeholder.xyz"
-        result = job_scraper.find_job_title_indeed(self.invalid_card, ['.net'], [])
-        self.assertEqual(result, ("", ""))
-        mock_return.assert_not_called()
+    def test_check_valid_job_title_true(self):
+        result = job_scraper.check_valid_job_title(".net developer (oregon state)", ["senior", "sr."])
+        self.assertTrue(result)
+
+    def test_check_valid_job_title_false(self):
+        result = job_scraper.check_valid_job_title(".net developer (oregon state)", ["senior", ".net"])
+        self.assertFalse(result)
+
+    # @patch('src.job_search_scraper.get_description_url')
+    # def test_find_job_title_indeed_filter(self, mock_return):
+    #     mock_return.return_value = True, "https://placeholder.xyz"
+    #     result = job_scraper.find_job_title_indeed(self.invalid_card, ['.net'], [])
+    #     self.assertEqual(result, ("", ""))
+    #     mock_return.assert_not_called()
 
     @unittest.skip
     def test_get_jobmap_valid(self):

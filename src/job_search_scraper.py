@@ -51,40 +51,40 @@ class JobSearchScraper:
         self.titles_to_skip = titles_filter
         self.search_filter = search_filter
 
-    def get_indeed_jobs(self):
-        """
-
-        Returns:
-             [[str]]: 2d array holding all the results for the job title/location query.
-        """
-        jobs_per_page = 10
-        data = []
-        print("Searching for {0} jobs in {1}".format(self.title, self.location))
-        url = ("https://www.indeed.com/jobs?q={0}&".format(self.title.replace(' ', '%20')) +
-               urllib.parse.urlencode(self.search_filter))
-        response = send_request(url, {})
-        if not response:
-            return data
-        soup = BeautifulSoup(response.content, "html.parser")
-        total_pages = get_indeed_jobs_count(soup)
-        print("Searching for {0} jobs in {1} | total pages found: {2}".format(self.title, self.location, total_pages))
-        for page_num in range(0, total_pages, jobs_per_page):
-            if page_num == 0:
-                self.get_jobmap(response.text)
-                page_results = self.get_indeed_job_info(soup, self.jobmap)
-            else:
-                temp_url = "{0}&start={1}".format(url, page_num)
-                response = send_request(temp_url, {})
-                if not response:
-                    print("request failed with status code " + response.status_code)
-                    continue
-                self.get_jobmap(response.text)
-                soup = BeautifulSoup(response.content, "html.parser")
-                page_results = self.get_indeed_job_info(soup, self.jobmap)
-
-            data.extend(page_results)
-
-        return data
+    # def get_indeed_jobs(self):
+    #     """
+    #
+    #     Returns:
+    #          [[str]]: 2d array holding all the results for the job title/location query.
+    #     """
+    #     jobs_per_page = 10
+    #     data = []
+    #     print("Searching for {0} jobs in {1}".format(self.title, self.location))
+    #     url = ("https://www.indeed.com/jobs?q={0}&".format(self.title.replace(' ', '%20')) +
+    #            urllib.parse.urlencode(self.search_filter))
+    #     response = send_request(url, {})
+    #     if not response:
+    #         return data
+    #     soup = BeautifulSoup(response.content, "html.parser")
+    #     total_pages = get_indeed_jobs_count(soup)
+    #     print("Searching for {0} jobs in {1} | total pages found: {2}".format(self.title, self.location, total_pages))
+    #     for page_num in range(0, total_pages, jobs_per_page):
+    #         if page_num == 0:
+    #             self.get_jobmap(response.text)
+    #             page_results = self.get_indeed_job_info(soup, self.jobmap)
+    #         else:
+    #             temp_url = "{0}&start={1}".format(url, page_num)
+    #             response = send_request(temp_url, {})
+    #             if not response:
+    #                 print("request failed with status code " + response.status_code)
+    #                 continue
+    #             self.get_jobmap(response.text)
+    #             soup = BeautifulSoup(response.content, "html.parser")
+    #             page_results = self.get_indeed_job_info(soup, self.jobmap)
+    #
+    #         data.extend(page_results)
+    #
+    #     return data
 
     def get_indeed_jobs_multithread(self):
         """
@@ -169,19 +169,19 @@ class JobSearchScraper:
 
         return data
 
-    def get_jobmap(self, text):
-        """
-        Some of the links for job descriptions are created dynamically, this function finds the JavaScript
-        values of the jobmap[] variable in a script of the html doc returned from the original page request.
-        All of the jobmap values are found with a regex capture.
-
-        Args:
-            text (BeautifulSoup object): The html results from the page request
-
-        Returns:
-            No return
-        """
-        self.jobmap = jobmap_filter.findall(text)
+    # def get_jobmap(self, text):
+    #     """
+    #     Some of the links for job descriptions are created dynamically, this function finds the JavaScript
+    #     values of the jobmap[] variable in a script of the html doc returned from the original page request.
+    #     All of the jobmap values are found with a regex capture.
+    #
+    #     Args:
+    #         text (BeautifulSoup object): The html results from the page request
+    #
+    #     Returns:
+    #         No return
+    #     """
+    #     self.jobmap = jobmap_filter.findall(text)
 
 
 def get_jobmap_multi(text: str):
@@ -250,36 +250,46 @@ def get_job_title_indeed(card: BeautifulSoup) -> str:
 
 
 def check_valid_job_title(title: str, titles_to_skip: [str]) -> bool:
+    """
+    TODO: Currently its checking if the string in titles_to_skip is contained inside title at all, not just the
+          words in title.
+    Args:
+        title (str): The job title found earlier.
+        titles_to_skip ([str]): List of words to filter title responses by.
+
+    Returns:
+         bool: True if no elements in titles_to_skip match title, otherwise False.
+    """
     return not any(ele in title for ele in titles_to_skip)
 
 
-def find_job_title_indeed(card, titles_to_skip: [str], jobmap: [str]):
-    """
-    Function that currently gets the job title, filters based on it, and calls check_entry_level_job which filters
-    based on experience requirements and if its valid gets the job URL.
-
-    Args:
-        card (BeautifulSoup object): The individual job posting card being processed.
-        titles_to_skip ([str]): Array of strings entered by user used to filter out results based on job title.
-        jobmap ([str]):
-
-    Returns:
-        str: The job title or empty string is result is being skipped.
-        str: URL to individual job posting or empty string if being skipped.
-    """
-    title_text = card.find("h2", {"class": "title"})
-    if title_text:
-        title = title_text.text.lower().strip()
-
-        if not any(ele in title for ele in titles_to_skip):
-            # valid, job_description_url = check_entry_level_job(title_text, jobmap)
-            # if valid:
-            job_description_url = get_description_url(title_text, jobmap)
-            if job_description_url:
-                if title.find('\n') != -1:
-                    title = title.split('\n')[0]
-                return title, job_description_url
-    return "", ""
+# def find_job_title_indeed(card, titles_to_skip: [str], jobmap: [str]):
+#     """
+#     Function that currently gets the job title, filters based on it, and calls check_entry_level_job which filters
+#     based on experience requirements and if its valid gets the job URL.
+#
+#     Args:
+#         card (BeautifulSoup object): The individual job posting card being processed.
+#         titles_to_skip ([str]): Array of strings entered by user used to filter out results based on job title.
+#         jobmap ([str]):
+#
+#     Returns:
+#         str: The job title or empty string is result is being skipped.
+#         str: URL to individual job posting or empty string if being skipped.
+#     """
+#     title_text = card.find("h2", {"class": "title"})
+#     if title_text:
+#         title = title_text.text.lower().strip()
+#
+#         if not any(ele in title for ele in titles_to_skip):
+#             # valid, job_description_url = check_entry_level_job(title_text, jobmap)
+#             # if valid:
+#             job_description_url = get_description_url(title_text, jobmap)
+#             if job_description_url:
+#                 if title.find('\n') != -1:
+#                     title = title.split('\n')[0]
+#                 return title, job_description_url
+#     return "", ""
 
 
 def check_entry_level_job(soup, jobmap: [str]):
