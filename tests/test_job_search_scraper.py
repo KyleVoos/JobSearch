@@ -36,6 +36,7 @@ class JobScraperTests(unittest.TestCase):
         self.search_fullpage = mmap(f.fileno(), 0, access=ACCESS_READ).read().decode("utf-8")
         f.close()
 
+    @unittest.skip
     @patch.multiple('src.job_search_scraper',
                     get_job_title_indeed=MagicMock(return_value=".net developer (oregon state)"),
                     check_valid_job_title=MagicMock(return_value=True),
@@ -50,13 +51,14 @@ class JobScraperTests(unittest.TestCase):
                                                                         " development language revisions and"
                                                                         " technological advances."))
     def test_get_indeed_job_info_single(self):
-        result = self.scraper.get_indeed_job_info(self.valid_card, [])
+        result = self.scraper.get_indeed_job_info(self.valid_card)
         arr = [["09c72f50e34a9383", ".net developer (oregon state)", "Oregon City, OR", "Hexacta", "24 days ago",
                "None", "Design, develop and maintain complex software systems. Keep abreast of software development"
                        " language revisions and technological advances.",
                "https://www.indeed.com/viewjob?jk=09c72f50e34a9383&vjs=3"]]
         self.assertEqual(result, arr)
 
+    @unittest.skip
     @patch.multiple('src.job_search_scraper',
                     get_job_title_indeed=MagicMock(side_effect=["title1", "title2", "title3", "title4", "title5"]),
                     check_valid_job_title=MagicMock(side_effect=[True, True, False, True, False]),
@@ -67,7 +69,7 @@ class JobScraperTests(unittest.TestCase):
                     find_job_post_date_indeed=MagicMock(side_effect=["date1", "date2", "date3"]),
                     find_job_post_summary_indeed=MagicMock(side_effect=["summary1", "summary2", "summary3"]))
     def test_get_indeed_job_info_multiple(self):
-        result = self.scraper.get_indeed_job_info(self.fullpage, [])
+        result = self.scraper.get_indeed_job_info(self.fullpage)
         arr = [["id1", "title1", "loc1", "comp1", "date1", "None", "summary1", "url1"],
                ["id2", "title2", "loc2", "comp2", "date2", "None", "summary2", "url2"],
                ["id3", "title4", "loc3", "comp3", "date3", "None", "summary3", "url3"]]
@@ -167,16 +169,6 @@ class JobScraperTests(unittest.TestCase):
     #     self.assertEqual(result, ("", ""))
     #     mock_return.assert_not_called()
 
-    @unittest.skip
-    def test_get_jobmap_valid(self):
-        self.scraper.get_jobmap(self.search_fullpage)
-        jobmap_ids = [
-            '09c72f50e34a9383', '4c24de303832bb3b', '62bd365536499f30', '1b49f0b4774b984e', '5e6c17abae07208b',
-            'c60aa68eb3872bac', '27bd456c574c3733', 'd7f10650ff426126', '37ff0493102ff545', '9032a7f27be9fb14',
-            '3e617ed9345ab519', '65d6ab603cf5416d', '5b9883ee8f907146', '4cf15a0a73ed4489', '48f0254f3fee04a4',
-        ]
-        self.assertEqual(self.scraper.jobmap, jobmap_ids)
-
     def test_get_job_id_indeed_valid(self):
         card = self.valid_card.find('div', {'class': 'jobsearch-SerpJobCard unifiedRow row result'})
         result = job_scraper.get_job_id_indeed(card)
@@ -188,6 +180,17 @@ class JobScraperTests(unittest.TestCase):
         self.assertEqual(result, "")
         # shouldn't be possible but testing to make sure it still works
         result = job_scraper.get_job_id_indeed(self.invalid_card)
+        self.assertEqual(result, "")
+
+    def test_get_description_url(self):
+        id = ['09c72f50e34a9383', '4c24de303832bb3b', '62bd365536499f30', '1b49f0b4774b984e', '5e6c17abae07208b']
+        for card in self.fullpage.find_all('div', {'class': 'jobsearch-SerpJobCard unifiedRow row result'}):
+            cur_id = id.pop()
+            result = job_scraper.get_description_url(card.find("h2", {"class": "title"}), cur_id)
+            self.assertEqual(result, "https://www.indeed.com/viewjob?jk={0}&vjs=3".format(cur_id))
+
+    def test_get_description_url_invalid(self):
+        result = job_scraper.get_description_url(self.valid_card.find("h2", {"class": "title"}), "")
         self.assertEqual(result, "")
 
 
