@@ -3,16 +3,15 @@ Add an overview here later.
 
 TODO:
     1) I should be able to change this from being a class and have everything continue to work correctly with
-    less complexity.
+    less complexity. (PARTIALLY DONE)
     2) Split up find_job_title_indeed() and check_entry_level_job() so the functions are not getting
-    job data and filtering job results.
+    job data and filtering job results. (DONE)
     3) Look into multi-threading requests for paginated job results, they are independent of each other so it would work
-    its just whether or not there would be a performance benefit and how many threads should I create.
+    its just whether or not there would be a performance benefit and how many threads should I create. (PARTIALLY DONE)
 """
 import requests
 from bs4 import BeautifulSoup
 import re
-import urllib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import sleep
 
@@ -119,6 +118,18 @@ class JobSearchScraper:
         return data
 
     def get_jobs_pages(self, start_page: int, end_page: int) -> [[str]]:
+        """
+        Function that does the requests to get each page of job results. If the HTTP request is successful
+        the page is passed to get_indeed_job_info(). After each page has been processed the results are
+        added to an array that is returned after execution completes.
+
+        Args:
+            start_page (int): Starting job search results page number.
+            end_page (int): Ending job search results number.
+
+        Returns:
+            [[str]]: 2d array containing all the extracted info for valid entry-level jobs.
+        """
         data = []
         print("start_page: {0} | end_page: {1}".format(start_page, end_page))
         print("Searching for {0} jobs in {1}".format(self.title, self.location))
@@ -213,6 +224,15 @@ def get_job_id_indeed(card: BeautifulSoup) -> str:
 
 
 def get_job_title_indeed(card: BeautifulSoup) -> str:
+    """
+    Extracts the jobs title from the portion of HTML containing an individual job card.
+
+    Args:
+        card (BeautifulSoup object): The individual job posting card being processed.
+
+    Returns:
+         str: The job title extracted, otherwise an empty string.
+    """
     title_text = card.find("h2", {"class": "title"})
     if title_text:
         return title_text.text.lower().strip()
@@ -221,11 +241,32 @@ def get_job_title_indeed(card: BeautifulSoup) -> str:
 
 
 def check_valid_job_title(title: str, titles_to_skip: [str]) -> bool:
+    """
+    Determines if the job title extracted contains any of the phrases in titles_to_skip.
+    If it does, this job is not included in the results.
+
+    Args:
+        title (str): Job title previously extracted.
+        titles_to_skip ([str]): List of phrases that should be excluded in job titles.
+
+    Returns:
+        bool: True if job title doesn't contains anything in titles_to_skip, otherwise false.
+    """
     return not any(ele in title for ele in titles_to_skip)
 
 
 def get_description_url(soup: BeautifulSoup, job_id: str) -> str:
+    """
+    Find or builds the url for the job description. The url is extracted from the HTML passed, if the link
+    contains 'pagead' its a dynamic link and the description url is programmatically built with the job_id.
 
+    Args:
+        soup (BeautifulSoup object):
+        job_id (str):
+
+    Returns:
+        str: The url extracted from the HTML, or manually built from the job_id if the extracted url was dynamic.
+    """
     for link in soup.find_all("a"):
         job_description_url = link.get('href')
         if job_description_url.find('pagead') != -1:

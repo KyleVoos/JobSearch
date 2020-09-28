@@ -43,5 +43,8 @@ if __name__ == "__main__":
     start_queries(input_vals)
     output_selection = usr_input.get_output_result_selection()
     dataframe.drop_duplicates(subset=None, keep="first", inplace=True)
-    export_results.export_data(dataframe, output_selection)
+    if len(dataframe) > 0:
+        export_results.export_data(dataframe, output_selection)
+    else:
+        print("No results found.")
 
