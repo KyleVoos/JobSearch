@@ -18,6 +18,7 @@ from time import sleep
 
 base_url = "https://www.indeed.com/"
 experience_filter = re.compile('[2-9]\s*\+?-?\s*[1-9]?\s*[yY]e?a?[rR][sS]?')
+valid_experience_filter = re.compile('[0-1]\s*\+?-?\s*[1-9]?\s*[yY]e?a?[rR][sS]?')
 jobmap_filter = re.compile('jobmap\[[0-9]+\]=\s+{jk:\'(\w+)\'')
 jobmap_card_filter = re.compile('jobmap\[([0-9]+)\]')
 vjs_filter = re.compile('(vjs=[0-9]+)')
@@ -121,7 +122,6 @@ class JobSearchScraper:
         print("start_page: {0} | end_page: {1}".format(start_page, end_page))
         print("Searching for {0} jobs in {1}".format(self.title, self.location))
         url = "https://www.indeed.com/jobs?q={0}&".format(self.title.replace(' ', '%20'))
-               # + urllib.parse.urlencode(self.search_filter))
         for page_num in range(start_page, end_page, 10):
             temp_url = "{0}&start={1}".format(url, page_num)
             response = send_request(temp_url, self.search_filter)
@@ -129,16 +129,15 @@ class JobSearchScraper:
                 print("request failed with status code {0} | title: {1} | loc: {2}".format(response.status_code,
                                                                                            self.title, self.location))
                 continue
-            local_jobmap = get_jobmap_multi(response.text)
             soup = BeautifulSoup(response.content, "html.parser")
-            page_results = self.get_indeed_job_info(soup, local_jobmap)
+            page_results = self.get_indeed_job_info(soup)
             data.extend(page_results)
             print("start_page: {0} | end_page: {1} | page_num: {2} | len(data): {3}".format(start_page, end_page, page_num, len(data)))
             sleep(1.0)
 
         return data
 
-    def get_indeed_job_info(self, soup: BeautifulSoup, jobmap: [str]):
+    def get_indeed_job_info(self, soup: BeautifulSoup):
         """
         Function that iterates through each of the job postings on a page of job search results
         With BeautifulSoup each 'card' is found on the page and then processed individually. Each
@@ -156,11 +155,14 @@ class JobSearchScraper:
             title = get_job_title_indeed(card)
             if not check_valid_job_title(title, self.titles_to_skip):
                 continue
-            # title, description_url = find_job_title_indeed(card, self.titles_to_skip, jobmap)
-            # if len(title) == 0:
-            #     continue
-            description_url = get_description_url(card.find("h2", {"class": "title"}), jobmap)
             job_id = get_job_id_indeed(card)
+            description_url = get_description_url(card.find("h2", {"class": "title"}), job_id)
+            description_response = send_request(description_url, {})
+            if not description_response:
+                print("Failed to get job description for {0}: ID: {1}".format(title, job_id))
+                continue
+            if not check_description_requirements(description_response.text):
+                continue
             company_name = find_company_indeed(card)
             location = find_job_location_indeed(card)
             date_posted = find_job_post_date_indeed(card)
@@ -168,38 +170,6 @@ class JobSearchScraper:
             data.append([job_id, title, location, company_name, date_posted, "None", summary, description_url])
 
         return data
-
-    # def get_jobmap(self, text):
-    #     """
-    #     Some of the links for job descriptions are created dynamically, this function finds the JavaScript
-    #     values of the jobmap[] variable in a script of the html doc returned from the original page request.
-    #     All of the jobmap values are found with a regex capture.
-    #
-    #     Args:
-    #         text (BeautifulSoup object): The html results from the page request
-    #
-    #     Returns:
-    #         No return
-    #     """
-    #     self.jobmap = jobmap_filter.findall(text)
-
-
-def get_jobmap_multi(text: str):
-    """
-    TODO: I just realized the value I need in the jobmap is the job ID, this function is not unnecessary and
-          can be removed by passing the job ID after its found.
-
-    Some of the links for job descriptions are created dynamically, this function finds the JavaScript
-    values of the jobmap[] variable in a script of the html doc returned from the original page request.
-    All of the jobmap values are found with a regex capture.
-
-    Args:
-        text (str): The HTML doc returned from the original or paginated requests represented as a string.
-
-    Returns:
-         [str]: An array of strings containing the jk value needed to built the URL for the job description.
-    """
-    return jobmap_filter.findall(text)
 
 
 def send_request(url: str, queries: {}):
@@ -250,106 +220,17 @@ def get_job_title_indeed(card: BeautifulSoup) -> str:
 
 
 def check_valid_job_title(title: str, titles_to_skip: [str]) -> bool:
-    """
-    TODO: Currently its checking if the string in titles_to_skip is contained inside title at all, not just the
-          words in title.
-    Args:
-        title (str): The job title found earlier.
-        titles_to_skip ([str]): List of words to filter title responses by.
-
-    Returns:
-         bool: True if no elements in titles_to_skip match title, otherwise False.
-    """
     return not any(ele in title for ele in titles_to_skip)
 
 
-# def find_job_title_indeed(card, titles_to_skip: [str], jobmap: [str]):
-#     """
-#     Function that currently gets the job title, filters based on it, and calls check_entry_level_job which filters
-#     based on experience requirements and if its valid gets the job URL.
-#
-#     Args:
-#         card (BeautifulSoup object): The individual job posting card being processed.
-#         titles_to_skip ([str]): Array of strings entered by user used to filter out results based on job title.
-#         jobmap ([str]):
-#
-#     Returns:
-#         str: The job title or empty string is result is being skipped.
-#         str: URL to individual job posting or empty string if being skipped.
-#     """
-#     title_text = card.find("h2", {"class": "title"})
-#     if title_text:
-#         title = title_text.text.lower().strip()
-#
-#         if not any(ele in title for ele in titles_to_skip):
-#             # valid, job_description_url = check_entry_level_job(title_text, jobmap)
-#             # if valid:
-#             job_description_url = get_description_url(title_text, jobmap)
-#             if job_description_url:
-#                 if title.find('\n') != -1:
-#                     title = title.split('\n')[0]
-#                 return title, job_description_url
-#     return "", ""
-
-
-def check_entry_level_job(soup, jobmap: [str]):
-    """
-    Function to check if a job is entry-level and extract the job description URL. To check whether a job is
-    entry-level or not an HTTP request is made to the job description URL. After the description text is found
-    a regex is used to search the text for any strings matching [1+]-[2+], [#] years. If anything is found the
-    job is not considered to be entry level and is left out of the results.
-
-    This function is also where the jobmap is used. Because some description URLs are built dynamically, and will
-    contain 'pagead' this is used to identify that using the jobmap is needed. Next a regular expression is used to
-    capture the jobmap IDs number from the HTML text and the job description URL is built.
-
-    Args:
-        soup (BeautifulSoup object): BS4 object of the job card being processed.
-        jobmap ([str]): The jobmap for this current instance of the JobSearchScraper class.
-
-    Returns:
-         bool: True if a valid entry level job, otherwise False.
-         str: Job posting URL if a valid job, otherwise empty string.
-    """
-    for link in soup.find_all("a"):
-        job_description_url = link.get('href')
-        if job_description_url.find('pagead') != -1:
-            # jobmap_id = re.search('jobmap\[([0-9]+)\]', link.attrs['onclick']).group(1)
-            jobmap_id = jobmap_card_filter.search(link.attrs['onclick']).group(1)
-            # vjs = re.search('(vjs=[0-9]+)', job_description_url).group(1)
-            vjs = vjs_filter.search(job_description_url).group(1)
-            job_description_url = "/viewjob?jk={0}&{1}".format(jobmap[int(jobmap_id)], vjs)
-        job_description_url = "https://www.indeed.com" + job_description_url
-        response = send_request(job_description_url, {})
-        sleep(0.1)
-        if not response:
-            break
-        check = experience_filter.search(response.text)
-        if not check:
-            return True, job_description_url
-
-    return False, ""
-
-
-def get_description_url(soup: BeautifulSoup, jobmap: [str]) -> str:
+def get_description_url(soup: BeautifulSoup, job_id: str) -> str:
 
     for link in soup.find_all("a"):
         job_description_url = link.get('href')
         if job_description_url.find('pagead') != -1:
-            # jobmap_id = re.search('jobmap\[([0-9]+)\]', link.attrs['onclick']).group(1)
-            jobmap_id = jobmap_card_filter.search(link.attrs['onclick']).group(1)
-            # vjs = re.search('(vjs=[0-9]+)', job_description_url).group(1)
             vjs = vjs_filter.search(job_description_url).group(1)
-            job_description_url = "/viewjob?jk={0}&{1}".format(jobmap[int(jobmap_id)], vjs)
-        job_description_url = "https://www.indeed.com" + job_description_url
-        response = send_request(job_description_url, {})
-        if not response:
-            break
-        sleep(0.1)
-        if check_description_requirements(response.text):
-            return job_description_url
-
-        return ""
+            job_description_url = "/viewjob?jk={0}&{1}".format(job_id, vjs)
+        return "https://www.indeed.com" + job_description_url
 
 
 def check_description_requirements(text: str) -> bool:
@@ -363,8 +244,9 @@ def check_description_requirements(text: str) -> bool:
         bool: True if the job is entry level (the experience filter did not capture anything), otherwise False.
     """
     check = experience_filter.search(text)
+    valid_requirement = valid_experience_filter.search(text)
 
-    return check is None
+    return check is None or valid_requirement is not None
     
     
 def find_company_indeed(card: BeautifulSoup) -> str:
