@@ -1,8 +1,8 @@
 """
 TODO:
-    1) Add mock html documents to unit test BeautifulSoup.
+    1) Add mock html documents to unit test BeautifulSoup. (DONE)
     2) Look into integration tests for BeautifulSoup and requests.
-    3) Look into unit tests for requests.
+    3) Look into unit tests for requests. (DONE)
 """
 import unittest
 from unittest.mock import patch
